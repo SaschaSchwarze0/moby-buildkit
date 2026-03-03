@@ -1115,8 +1115,18 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
 		uid, gid := idmap.RootPair()
-		err := filepath.WalkDir(gitDir, func(p string, _ os.DirEntry, _ error) error {
-			return os.Lchown(p, uid, gid)
+		root, err := os.OpenRoot(gitDir)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to open root for git directory")
+		}
+		defer root.Close()
+		err = filepath.WalkDir(gitDir, func(p string, _ os.DirEntry, _ error) error {
+			relPath, err := filepath.Rel(gitDir, p)
+			if err != nil {
+				return err
+			}
+
+			return root.Lchown(relPath, uid, gid)
 		})
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to remap git checkout")
